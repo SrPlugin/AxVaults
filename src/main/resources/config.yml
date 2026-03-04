@@ -19,9 +19,25 @@ item-picker-rows: 6
 vault-storage-rows: 6
 
 database:
-  # h2, sqlite
+  # h2, sqlite, mysql
   # for single server setups we recommend h2
+  # for multi-server setups you MUST use mysql
   type: "h2"
+
+  # MySQL connection details
+  address: "localhost"
+  port: "3306"
+  database: "axvaults"
+  username: "root"
+  password: ""
+
+  # Advanced connection pool settings (for MySQL)
+  pool:
+    maximum-pool-size: 10
+    minimum-idle: 10
+    maximum-lifetime: 1800000
+    keepalive-time: 0
+    connection-timeout: 5000
 
 # modes:
 # 0 - every vault needs a separate permission (axvaults.vault.10 will only give access to vault #10)
@@ -114,5 +130,19 @@ update-notifier:
 # this can cause a lot of spam, only use if a developer asks you to
 debug: false
 
+# Messaging settings for cross-server support
+# You MUST use MySQL or a remote database for this to work
+messaging:
+  # none, sql, redis
+  type: "none"
+  # if enabled, the player will be forced to wait for his data to be saved when quitting
+  # this prevents duplication bugs during server switches
+  sync-quit-save: true
+  redis:
+    address: "localhost"
+    port: 6379
+    password: ""
+    channel: "axvaults:messaging"
+
 # do not change this
-version: 10
+version: 11

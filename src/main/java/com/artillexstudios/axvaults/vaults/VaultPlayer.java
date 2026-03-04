@@ -87,11 +87,21 @@ public class VaultPlayer {
     }
 
     public void save() {
-        AxVaults.getThreadedQueue().submit(() -> {
-            for (Vault vault : vaultMap.values()) {
-                VaultUtils.save(vault);
-            }
-        });
+        for (Vault vault : vaultMap.values()) {
+            VaultUtils.save(vault);
+        }
+
+        for (Vault vault : vaultMap.values()) {
+            close(vault.getStorage());
+        }
+    }
+
+    public void saveSync() {
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
+        for (Vault vault : vaultMap.values()) {
+            futures.add(VaultUtils.save(vault));
+        }
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
 
         for (Vault vault : vaultMap.values()) {
             close(vault.getStorage());

@@ -12,6 +12,8 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.jetbrains.annotations.NotNull;
 
+import static com.artillexstudios.axvaults.AxVaults.CONFIG;
+
 public class PlayerListeners implements Listener {
 
     public PlayerListeners() {
@@ -30,9 +32,13 @@ public class PlayerListeners implements Listener {
     public void onQuit(@NotNull PlayerQuitEvent event) {
         VaultPlayer vaultPlayer = VaultManager.getPlayerOrNull(event.getPlayer());
         if (vaultPlayer == null) return;
-        AxVaults.getThreadedQueue().submit(() -> {
+        
+        if (CONFIG.getBoolean("messaging.sync-quit-save", true)) {
+            vaultPlayer.saveSync();
+        } else {
             vaultPlayer.save();
-            if (AxVaults.getDatabase() instanceof MySQL db) db.checkForChanges();
-        });
+        }
+        
+        if (AxVaults.getDatabase() instanceof MySQL db) db.checkForChanges();
     }
 }

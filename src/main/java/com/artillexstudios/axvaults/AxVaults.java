@@ -117,7 +117,6 @@ public final class AxVaults extends AxPlugin {
         CommandManager.load();
 
         AutoSaveScheduler.start();
-        SQLMessaging.start();
 
         metrics = new AxMetrics(this, 3);
         metrics.start();
@@ -143,7 +142,6 @@ public final class AxVaults extends AxPlugin {
         }
 
         CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new)).join();
-        SQLMessaging.stop();
         database.disable();
         threadedQueue.stop();
     }

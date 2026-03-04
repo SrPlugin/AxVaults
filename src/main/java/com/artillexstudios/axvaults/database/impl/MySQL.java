@@ -8,6 +8,9 @@ import com.artillexstudios.axvaults.utils.ThreadUtils;
 import com.artillexstudios.axvaults.vaults.Vault;
 import com.artillexstudios.axvaults.vaults.VaultManager;
 import com.artillexstudios.axvaults.vaults.VaultPlayer;
+import com.artillexstudios.axvaults.database.messaging.Messenger;
+import com.artillexstudios.axvaults.database.messaging.RedisMessenger;
+import com.artillexstudios.axvaults.database.messaging.SQLMessaging;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.bukkit.Bukkit;
@@ -30,6 +33,9 @@ import static com.artillexstudios.axvaults.AxVaults.CONFIG;
 
 public class MySQL implements Database {
     private HikariDataSource dataSource;
+    private Messenger messenger;
+    private final ArrayList<Integer> acknowledged = new ArrayList<>();
+    private final HashMap<Integer, Long> sentFromHere = new HashMap<>();
 
     public MySQL() {
         Bukkit.getConsoleSender().sendMessage(StringUtils.formatToString("&#FF0000[AxVaults] MySQL is NOT fully supported! It will continue to work and you can ignore this warning, however there might be issues."));
@@ -104,6 +110,15 @@ public class MySQL implements Database {
         } catch (SQLException ex) {
             ex.printStackTrace();
         }
+
+        String messagingType = CONFIG.getString("messaging.type", "none").toLowerCase();
+        if (messagingType.equals("sql")) {
+            messenger = new SQLMessaging(this);
+        } else if (messagingType.equals("redis")) {
+            messenger = new RedisMessenger(this);
+        }
+
+        if (messenger != null) messenger.start();
     }
 
     @Override
@@ -141,6 +156,7 @@ public class MySQL implements Database {
                         stmt2.setString(3, vault.getUUID().toString());
                         stmt2.setInt(4, vault.getId());
                         stmt2.executeUpdate();
+                        sendMessage(Messenger.ChangeType.UPDATE, vault.getId(), vault.getUUID());
                     }
                 } else {
                     sql = "INSERT INTO axvaults_data(id, uuid, storage, icon) VALUES (?, ?, ?, ?);";
@@ -150,6 +166,7 @@ public class MySQL implements Database {
                         stmt2.setBytes(3, bytes);
                         stmt2.setString(4, vault.getRealIcon() == null ? null : vault.getRealIcon().name());
                         stmt2.executeUpdate();
+                        sendMessage(Messenger.ChangeType.INSERT, vault.getId(), vault.getUUID());
                     }
                 }
             }
@@ -234,6 +251,7 @@ public class MySQL implements Database {
             stmt.setString(1, uuid.toString());
             stmt.setInt(2, num);
             stmt.executeUpdate();
+            sendMessage(Messenger.ChangeType.DELETE, num, uuid);
         } catch (SQLException ex) {
             ex.printStackTrace();
         }
@@ -256,29 +274,20 @@ public class MySQL implements Database {
         }
     }
 
-    private void sendMessage(@NotNull ChangeType changeType, int id, UUID uuid) {
-        if (CONFIG.getString("multi-server-support", "none").equalsIgnoreCase("none")) return;
-        
-        final String sql = "INSERT INTO axvaults_messages(event, vault_id, uuid, date) VALUES (?, ?, ?, ?);";
-        try (Connection conn = dataSource.getConnection(); PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            stmt.setShort(1, (short) changeType.ordinal());
-            stmt.setInt(2, id);
-            stmt.setString(3, uuid.toString());
-            stmt.setLong(4, System.currentTimeMillis());
-            stmt.executeUpdate();
-            try (ResultSet rs = stmt.getGeneratedKeys()) {
-                if (rs.next()) sentFromHere.put(rs.getInt(1), System.currentTimeMillis() + 10_000L);
-            }
-
-        } catch (SQLException ex) {
-            ex.printStackTrace();
-        }
+    public HikariDataSource getDataSource() {
+        return dataSource;
     }
 
-    private final ArrayList<Integer> acknowledged = new ArrayList<>();
-    private final HashMap<Integer, Long> sentFromHere = new HashMap<>();
+    public HashMap<Integer, Long> getSentFromHere() {
+        return sentFromHere;
+    }
+
+    public void sendMessage(@NotNull Messenger.ChangeType changeType, int id, UUID uuid) {
+        if (messenger == null) return;
+        messenger.broadcast(changeType, id, uuid);
+    }
     public void checkForChanges() { // id, event, vault_id, uuid, date
-        if (CONFIG.getString("multi-server-support", "none").equalsIgnoreCase("none")) return;
+        if (CONFIG.getString("messaging.type", "none").equalsIgnoreCase("none")) return;
 
         final String sql = "SELECT * FROM axvaults_messages;";
         try (Connection conn = dataSource.getConnection(); PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -290,7 +299,7 @@ public class MySQL implements Database {
                     final int num = rs.getInt(3);
                     final UUID uuid = UUID.fromString(rs.getString(4));
 
-                    switch (ChangeType.entries[rs.getInt(2)]) {
+                    switch (Messenger.ChangeType.entries[rs.getInt(2)]) {
                         case UPDATE -> {
                             final VaultPlayer vp = VaultManager.getPlayers().get(uuid);
                             if (vp == null) {
@@ -322,7 +331,7 @@ public class MySQL implements Database {
         }
     }
 
-    private void updateVault(@NotNull Vault vault) {
+    public void updateVault(@NotNull Vault vault) {
         final String sql = "SELECT * FROM axvaults_data WHERE uuid = ? AND id = ?;";
         try (Connection conn = dataSource.getConnection(); PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setString(1, vault.getUUID().toString());
@@ -342,16 +351,11 @@ public class MySQL implements Database {
 
     @Override
     public void disable() {
+        if (messenger != null) messenger.stop();
         try {
             dataSource.close();
         } catch (Exception ex) {
             ex.printStackTrace();
         }
-    }
-
-    private enum ChangeType {
-        DELETE, UPDATE, INSERT;
-
-        public static final ChangeType[] entries = ChangeType.values();
     }
 }
