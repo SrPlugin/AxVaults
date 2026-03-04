@@ -77,11 +77,7 @@ public class VaultManager {
 
     @Nullable
     public static Vault getVault(Inventory inventory) {
-        for (VaultPlayer vaultPlayer : players.values()) {
-            for (Vault vault : vaultPlayer.getVaultMap().values()) {
-                if (inventory.equals(vault.getStorage())) return vault;
-            }
-        }
+        if (inventory.getHolder() instanceof Vault vault) return vault;
         return null;
     }
 

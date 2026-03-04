@@ -14,7 +14,13 @@ public interface Database {
 
     void setup();
 
-    void saveVault(Vault vault, Object result);
+    void saveVault(Vault vault, Object result, boolean syncMessenger);
+
+    void saveVaults(VaultPlayer player, java.util.Map<Vault, Object> vaults, boolean syncMessenger);
+
+    default void saveVault(Vault vault, Object result) {
+        saveVault(vault, result, false);
+    }
 
     void loadVaults(@NotNull VaultPlayer vaultPlayer);
 

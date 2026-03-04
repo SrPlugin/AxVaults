@@ -70,7 +70,7 @@ public class H2 implements Database {
     }
 
     @Override
-    public void saveVault(Vault vault, Object result) {
+    public void saveVault(Vault vault, Object result, boolean syncMessenger) {
         // delete empty vaults
         if (result instanceof Boolean bool && bool) {
             String sql = "DELETE FROM axvaults_data WHERE uuid = ? AND id = ?;";
@@ -118,6 +118,13 @@ public class H2 implements Database {
             }
         } catch (SQLException ex) {
             ex.printStackTrace();
+        }
+    }
+
+    @Override
+    public void saveVaults(VaultPlayer player, java.util.Map<Vault, Object> vaults, boolean syncMessenger) {
+        for (java.util.Map.Entry<Vault, Object> entry : vaults.entrySet()) {
+            saveVault(entry.getKey(), entry.getValue(), syncMessenger);
         }
     }
 

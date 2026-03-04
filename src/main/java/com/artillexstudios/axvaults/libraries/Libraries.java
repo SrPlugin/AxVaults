@@ -16,9 +16,9 @@ public enum Libraries {
 
 //    POSTGRESQL("org{}postgresql:postgresql:42.7.5", relocation("org{}postgresql", "com.artillexstudios.axvaults.libs.postgresql")),
 
-    JEDIS("redis{}clients:jedis:5.1.0", relocation("redis{}clients{}jedis", "com.artillexstudios.axvaults.libs.jedis")),
-
     COMMONS_POOL2("org{}apache{}commons:commons-pool2:2.12.0", relocation("org{}apache{}commons{}pool2", "com.artillexstudios.axvaults.libs.commons.pool2")),
+
+    JEDIS("redis{}clients:jedis:5.1.0", relocation("redis{}clients{}jedis", "com.artillexstudios.axvaults.libs.jedis")),
 
     MYSQL_CONNECTOR("com{}mysql:mysql-connector-j:9.2.0", relocation("com{}mysql", "com.artillexstudios.axvaults.libs.mysql"));
 

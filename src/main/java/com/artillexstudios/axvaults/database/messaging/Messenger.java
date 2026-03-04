@@ -4,7 +4,11 @@ import java.util.UUID;
 
 public interface Messenger {
 
-    void broadcast(ChangeType type, int vaultId, UUID playerUuid);
+    void broadcast(ChangeType type, int vaultId, UUID playerUuid, boolean sync);
+
+    default void broadcast(ChangeType type, int vaultId, UUID playerUuid) {
+        broadcast(type, vaultId, playerUuid, false);
+    }
 
     default void start() {}
 

@@ -38,7 +38,6 @@ public class MySQL implements Database {
     private final HashMap<Integer, Long> sentFromHere = new HashMap<>();
 
     public MySQL() {
-        Bukkit.getConsoleSender().sendMessage(StringUtils.formatToString("&#FF0000[AxVaults] MySQL is NOT fully supported! It will continue to work and you can ignore this warning, however there might be issues."));
     }
 
     @Override
@@ -70,12 +69,14 @@ public class MySQL implements Database {
               `id` INT(128) NOT NULL,
               `uuid` VARCHAR(36) NOT NULL,
               `storage` LONGBLOB,
-              `icon` VARCHAR(128)
+              `icon` VARCHAR(128),
+              PRIMARY KEY (`uuid`, `id`)
             );
         """;
 
         try (Connection conn = dataSource.getConnection(); PreparedStatement stmt = conn.prepareStatement(CREATE_TABLE)) {
             stmt.executeUpdate();
+            Bukkit.getConsoleSender().sendMessage(StringUtils.formatToString("&#55ff00[AxVaults] MySQL Connected!"));
         } catch (SQLException ex) {
             ex.printStackTrace();
         }
@@ -122,7 +123,7 @@ public class MySQL implements Database {
     }
 
     @Override
-    public void saveVault(Vault vault, Object result) {
+    public void saveVault(Vault vault, Object result, boolean syncMessenger) {
         // delete empty vaults
         if (result instanceof Boolean bool && bool) {
             String sql = "DELETE FROM axvaults_data WHERE uuid = ? AND id = ?;";
@@ -142,33 +143,55 @@ public class MySQL implements Database {
         }
 
         byte[] bytes = (byte[]) result;
-        String sql = "SELECT * FROM axvaults_data WHERE uuid = ? AND id = ?;";
+        String sql = "INSERT INTO axvaults_data(id, uuid, storage, icon) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE storage = VALUES(storage), icon = VALUES(icon);";
         try (Connection conn = dataSource.getConnection(); PreparedStatement stmt = conn.prepareStatement(sql)) {
-            stmt.setString(1, vault.getUUID().toString());
-            stmt.setInt(2, vault.getId());
+            stmt.setInt(1, vault.getId());
+            stmt.setString(2, vault.getUUID().toString());
+            stmt.setBytes(3, bytes);
+            stmt.setString(4, vault.getRealIcon() == null ? null : vault.getRealIcon().name());
+            
+            int affected = stmt.executeUpdate();
+            if (affected > 1) { // 2 means UPDATE (with MySQL), 1 means INSERT
+                sendMessage(Messenger.ChangeType.UPDATE, vault.getId(), vault.getUUID(), syncMessenger);
+            } else {
+                sendMessage(Messenger.ChangeType.INSERT, vault.getId(), vault.getUUID(), syncMessenger);
+            }
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+        }
+    }
 
-            try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    sql = "UPDATE axvaults_data SET storage = ?, icon = ? WHERE uuid = ? AND id = ?;";
-                    try (PreparedStatement stmt2 = conn.prepareStatement(sql)) {
-                        stmt2.setBytes(1, bytes);
-                        stmt2.setString(2, vault.getRealIcon() == null ? null : vault.getRealIcon().name());
-                        stmt2.setString(3, vault.getUUID().toString());
-                        stmt2.setInt(4, vault.getId());
-                        stmt2.executeUpdate();
-                        sendMessage(Messenger.ChangeType.UPDATE, vault.getId(), vault.getUUID());
+    @Override
+    public void saveVaults(VaultPlayer player, java.util.Map<Vault, Object> vaults, boolean syncMessenger) {
+        String sql = "INSERT INTO axvaults_data(id, uuid, storage, icon) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE storage = VALUES(storage), icon = VALUES(icon);";
+        try (Connection conn = dataSource.getConnection()) {
+            conn.setAutoCommit(false);
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                for (java.util.Map.Entry<Vault, Object> entry : vaults.entrySet()) {
+                    Vault vault = entry.getKey();
+                    Object result = entry.getValue();
+                    if (result instanceof Boolean bool && bool) {
+                        try (PreparedStatement del = conn.prepareStatement("DELETE FROM axvaults_data WHERE uuid = ? AND id = ?;")) {
+                            del.setString(1, vault.getUUID().toString());
+                            del.setInt(2, vault.getId());
+                            del.executeUpdate();
+                        }
+                        continue;
                     }
-                } else {
-                    sql = "INSERT INTO axvaults_data(id, uuid, storage, icon) VALUES (?, ?, ?, ?);";
-                    try (PreparedStatement stmt2 = conn.prepareStatement(sql)) {
-                        stmt2.setInt(1, vault.getId());
-                        stmt2.setString(2, vault.getUUID().toString());
-                        stmt2.setBytes(3, bytes);
-                        stmt2.setString(4, vault.getRealIcon() == null ? null : vault.getRealIcon().name());
-                        stmt2.executeUpdate();
-                        sendMessage(Messenger.ChangeType.INSERT, vault.getId(), vault.getUUID());
-                    }
+                    if (result == null) continue;
+
+                    stmt.setInt(1, vault.getId());
+                    stmt.setString(2, vault.getUUID().toString());
+                    stmt.setBytes(3, (byte[]) result);
+                    stmt.setString(4, vault.getRealIcon() == null ? null : vault.getRealIcon().name());
+                    stmt.addBatch();
                 }
+                stmt.executeBatch();
+            }
+            conn.commit();
+
+            for (Vault vault : vaults.keySet()) {
+                sendMessage(Messenger.ChangeType.UPDATE, vault.getId(), vault.getUUID(), syncMessenger);
             }
         } catch (SQLException ex) {
             ex.printStackTrace();
@@ -251,7 +274,7 @@ public class MySQL implements Database {
             stmt.setString(1, uuid.toString());
             stmt.setInt(2, num);
             stmt.executeUpdate();
-            sendMessage(Messenger.ChangeType.DELETE, num, uuid);
+            sendMessage(Messenger.ChangeType.DELETE, num, uuid, false);
         } catch (SQLException ex) {
             ex.printStackTrace();
         }
@@ -282,9 +305,9 @@ public class MySQL implements Database {
         return sentFromHere;
     }
 
-    public void sendMessage(@NotNull Messenger.ChangeType changeType, int id, UUID uuid) {
+    public void sendMessage(@NotNull Messenger.ChangeType changeType, int id, UUID uuid, boolean sync) {
         if (messenger == null) return;
-        messenger.broadcast(changeType, id, uuid);
+        messenger.broadcast(changeType, id, uuid, sync);
     }
     public void checkForChanges() { // id, event, vault_id, uuid, date
         if (CONFIG.getString("messaging.type", "none").equalsIgnoreCase("none")) return;
@@ -293,7 +316,7 @@ public class MySQL implements Database {
         try (Connection conn = dataSource.getConnection(); PreparedStatement stmt = conn.prepareStatement(sql)) {
             try (ResultSet rs = stmt.executeQuery()) {
                 while (rs.next()) {
-                    if (sentFromHere.containsKey(rs.getInt(1))) return;
+                    if (sentFromHere.containsKey(rs.getInt(1))) continue;
                     if (acknowledged.contains(rs.getInt(1))) continue;
                     acknowledged.add(rs.getInt(1));
                     final int num = rs.getInt(3);
@@ -303,11 +326,11 @@ public class MySQL implements Database {
                         case UPDATE -> {
                             final VaultPlayer vp = VaultManager.getPlayers().get(uuid);
                             if (vp == null) {
-                                return;
+                                continue;
                             }
                             final Vault vault = vp.getVault(num);
                             if (vault == null) {
-                                return;
+                                continue;
                             }
                             updateVault(vault);
                         }

@@ -40,5 +40,8 @@ public class PlayerListeners implements Listener {
         }
         
         if (AxVaults.getDatabase() instanceof MySQL db) db.checkForChanges();
+        
+        VaultManager.getPlayers().remove(event.getPlayer().getUniqueId());
+        VaultManager.getLoadingPlayers().remove(event.getPlayer().getUniqueId());
     }
 }

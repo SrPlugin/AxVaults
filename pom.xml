@@ -63,10 +63,14 @@
                                     <pattern>com.mysql</pattern>
                                     <shadedPattern>com.artillexstudios.axvaults.libs.mysql</shadedPattern>
                                 </relocation>
-<!--                                <relocation>-->
-<!--                                    <pattern>org.postgresql</pattern>-->
-<!--                                    <shadedPattern>com.artillexstudios.axvaults.libs.postgresql</shadedPattern>-->
-<!--                                </relocation>-->
+                                <relocation>
+                                    <pattern>redis.clients.jedis</pattern>
+                                    <shadedPattern>com.artillexstudios.axvaults.libs.jedis</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.apache.commons.pool2</pattern>
+                                    <shadedPattern>com.artillexstudios.axvaults.libs.commons.pool2</shadedPattern>
+                                </relocation>
                             </relocations>
                         </configuration>
                     </execution>

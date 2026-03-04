@@ -1,6 +1,7 @@
 package com.artillexstudios.axvaults.database.messaging;
 
 import com.artillexstudios.axapi.executor.ThreadedQueue;
+import com.artillexstudios.axapi.utils.StringUtils;
 import com.artillexstudios.axvaults.AxVaults;
 import com.artillexstudios.axvaults.database.impl.MySQL;
 import com.artillexstudios.axvaults.vaults.Vault;
@@ -10,6 +11,7 @@ import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 import redis.clients.jedis.JedisPubSub;
+import org.bukkit.Bukkit;
 
 import java.util.UUID;
 
@@ -40,6 +42,13 @@ public class RedisMessenger implements Messenger {
             pool = new JedisPool(config, address, port);
         } else {
             pool = new JedisPool(config, address, port, 2000, password);
+        }
+
+        try (Jedis jedis = pool.getResource()) {
+            jedis.ping();
+            Bukkit.getConsoleSender().sendMessage(StringUtils.formatToString("&#55ff00[AxVaults] Redis Connected!"));
+        } catch (Exception ex) {
+            Bukkit.getConsoleSender().sendMessage(StringUtils.formatToString("&#FF0000[AxVaults] Could NOT connect to Redis! Please check your configuration."));
         }
 
         pubSub = new JedisPubSub() {
@@ -81,13 +90,16 @@ public class RedisMessenger implements Messenger {
     }
 
     @Override
-    public void broadcast(ChangeType type, int vaultId, UUID playerUuid) {
-        queue.submit(() -> {
+    public void broadcast(ChangeType type, int vaultId, UUID playerUuid, boolean sync) {
+        Runnable runnable = () -> {
             try (Jedis jedis = pool.getResource()) {
                 jedis.publish(channel, type.name() + ";" + vaultId + ";" + playerUuid.toString());
             } catch (Exception ex) {
                 ex.printStackTrace();
             }
-        });
+        };
+
+        if (sync) runnable.run();
+        else queue.submit(runnable);
     }
 }

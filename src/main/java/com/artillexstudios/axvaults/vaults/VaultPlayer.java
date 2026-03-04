@@ -90,18 +90,15 @@ public class VaultPlayer {
         for (Vault vault : vaultMap.values()) {
             VaultUtils.save(vault);
         }
-
-        for (Vault vault : vaultMap.values()) {
-            close(vault.getStorage());
-        }
     }
 
     public void saveSync() {
-        List<CompletableFuture<Void>> futures = new ArrayList<>();
+        java.util.Map<Vault, Object> results = new java.util.HashMap<>();
         for (Vault vault : vaultMap.values()) {
-            futures.add(VaultUtils.save(vault));
+            results.put(vault, VaultUtils.getSerialized(vault));
         }
-        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+        AxVaults.getDatabase().saveVaults(this, results, true);
 
         for (Vault vault : vaultMap.values()) {
             close(vault.getStorage());
